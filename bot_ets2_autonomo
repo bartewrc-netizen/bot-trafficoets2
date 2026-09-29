@@ -1,0 +1,61 @@
+import discord
+from discord.ext import commands, tasks
+import requests
+
+# --- CONFIGURAZIONE ---
+TOKEN = "IL_TUO_TOKEN_DISCORD"
+CHANNEL_ID = 123456789012345678  # Sostituisci con l'ID del canale
+MINUTI_INTERVALLO = 30           # Frequenza aggiornamento autonoma
+
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+def get_truckersmp_data():
+    """Recupera lo stato attuale dei server e del traffico TruckersMP."""
+    url = "https://api.truckersmp.com/v2/servers"
+    try:
+        res = requests.get(url, timeout=10)
+        data = res.json()
+        if data.get("error"):
+            return None
+
+        servers = data.get("response", [])
+        report = "🚦 **UPDATE TRAFFICO ETS2 (TruckersMP)** 🚦\n\n"
+
+        for s in servers:
+            if s["game"] == "ETS2":
+                nome = s["name"]
+                players = s["players"]
+                max_p = s["maxplayers"]
+                queue = s["queue"]
+                
+                percentuale = (players / max_p) * 100
+                if percentuale > 80:
+                    stato = "🔴 Traffiico Intenso / Rallentamenti"
+                elif percentuale > 40:
+                    stato = "🟡 Traffico Moderato"
+                else:
+                    stato = "🟢 Traffico Scorrevole"
+
+                report += f"🔹 **{nome}**\n• Giocatori: `{players}/{max_p}` (Coda: {queue})\n• Stato: {stato}\n\n"
+
+        report += "💡 *Consiglio:* Nelle tratte storiche come Calais-Duisburg, con server oltre l'80% aspettati code prolungate."
+        return report
+    except Exception as e:
+        print(f"Errore API: {e}")
+        return None
+
+@bot.event
+async def on_ready():
+    print(f"Bot connesso come {bot.user.name}")
+    invia_traffico_autonomo.start()
+
+@tasks.loop(minutes=MINUTI_INTERVALLO)
+async def invia_traffico_autonomo():
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        report = get_truckersmp_data()
+        if report:
+            await channel.send(report)
+
+bot.run(TOKEN)
